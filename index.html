@@ -3112,7 +3112,7 @@ function mailRenderAuthState() {
     authBtn.style.display    = 'none';
     if (signoutBtn) signoutBtn.style.display = 'inline-flex';
     const email = MAIL_STATE.accountEmail || 'masaischool.com account';
-    if (statusEl) statusEl.innerHTML = '✔ Signed in as <strong>' + email + '</strong> — emails will send from this account.';
+    if (statusEl) statusEl.innerHTML = '✔ Signed in as <strong>' + email + '</strong> — inbox visible. Emails send from <strong>eictiitrprograms@masaischool.com</strong> via relay.';
     if (badge) { badge.style.background='var(--green-bg)'; badge.style.color='var(--green)'; badge.textContent='✔ Ready to send'; }
   } else {
     authBtn.style.display    = 'inline-flex';
@@ -5428,10 +5428,7 @@ async function executeBulkEmail() {
   if (!body.trim()) { showToast('Please enter a message body.', 'error'); return; }
   const emails = filteredData.map(d => (d.email || '').trim()).filter(e => e.length > 0);
   if (emails.length === 0) { showToast('None of the filtered students have a valid email address.', 'error'); return; }
-  if (!MAIL_STATE.signedIn) {
-    showToast('Sign in with your @masaischool.com account on the Student Mail tab first.', 'error');
-    closeBulkEmailModal(); switchTab('mail'); return;
-  }
+
   const ok = confirmMailSend(`Confirmation: Send bulk mail to ${emails.length} recipients from eictiitrprograms@masaischool.com?`);
   if (!ok) { showToast('Send cancelled.', 'error'); return; }
 
@@ -5882,7 +5879,7 @@ function _applyRelaySettings(url, secret) {
     <div class="relay-steps">
       <b>First time? Deploy the relay in 3 steps:</b>
       <ol>
-        <li>Go to <a href="https://script.google.com" target="_blank">script.google.com</a> → sign in as <b><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="ddb8b4bea9b4b4a9afadafb2baafbcb0ae9db0bcaebcb4aebeb5b2b2b1f3beb2b0">[email&#160;protected]</a></b> → New project</li>
+        <li>Go to <a href="https://script.google.com" target="_blank">script.google.com</a> → sign in as <b>eictiitrprograms@masaischool.com</b> → New project</li>
         <li>Paste <b>email_relay.gs</b> → Deploy → New deployment → Type: <b>Web App</b> → Execute as: <b>Me</b> → Access: <b>Anyone</b> → Deploy → Authorize</li>
         <li>Copy the <b>Web App URL</b> and paste it below</li>
       </ol>
@@ -5905,7 +5902,7 @@ function _applyRelaySettings(url, secret) {
 
     <div class="relay-hint">
       After saving, every email sent from the <b>Student Mail</b> tab will go from
-      <b><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="d8bdb1bbacb1b1acaaa8aab7bfaab9b5ab98b5b9abb9b1abbbb0b7b7b4f6bbb7b5">[email&#160;protected]</a></b> — no login required for anyone using this dashboard.
+      <b>eictiitrprograms@masaischool.com</b> — no login required for anyone using this dashboard.
     </div>
 
     <div class="relay-footer">
@@ -5927,7 +5924,7 @@ function _applyRelaySettings(url, secret) {
       <div class="email-modal-info">
         <span style="font-size:16px;">👥</span> <span id="email-modal-count">Drafting email to 0 filtered students</span>
       </div>
-      <p style="margin:0 0 12px;font-size:12px;color:var(--text3);line-height:1.4;">Sends from <strong><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="50353933243939242220223f3722313d23103d312331392333383f3f3c7e333f3d">[email&#160;protected]</a></strong> via the relay — no sign-in required.</p>
+      <p style="margin:0 0 12px;font-size:12px;color:var(--text3);line-height:1.4;">Sends from <strong>eictiitrprograms@masaischool.com</strong> via the relay — no sign-in required.</p>
       
       <div class="email-modal-form-group">
         <span class="email-modal-label">Email Method</span>
