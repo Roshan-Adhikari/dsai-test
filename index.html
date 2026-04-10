@@ -1225,7 +1225,7 @@
     <div class="mail-thread-head" style="border-bottom:1px solid var(--border);padding:14px 18px;">
       <div>
         <div class="mail-thread-title" style="font-size:15px;">Communication</div>
-        <div class="mail-thread-sub">Choose a template, fill placeholders, select students (dropouts excluded), then send via BCC from <strong><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="d0b5b9b3a4b9b9a4a2a0a2bfb7a2b1bda390bdb1a3b1b9a3b3b8bfbfbcfeb3bfbd">[email&#160;protected]</a></strong>.</div>
+        <div class="mail-thread-sub">Choose a template, fill placeholders, select students (dropouts excluded), then send via BCC from <strong>eictiitrprograms@masaischool.com</strong>.</div>
       </div>
     </div>
 
@@ -1268,6 +1268,10 @@
           <input class="mail-input" id="comm-test-email" type="email" placeholder="Test email address">
           <button class="btn btn-ghost comm-btn comm-btn-test" type="button" onclick="commSendTest()">Send test</button>
           <button class="btn btn-primary comm-btn comm-btn-send" type="button" onclick="commSendBulkBcc()">✉ Send BCC</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div id="comm-send-status" style="font-size:12px;color:var(--text2);min-height:18px;padding:2px 0;flex:1;"></div>
+          <button class="btn btn-ghost" style="font-size:11px;padding:3px 10px;" onclick="commTestRelay()">🔗 Test relay</button>
         </div>
       </div>
 
@@ -2222,7 +2226,7 @@ const MAIL_ALLOWED_DOMAINS = (window.MAIL_ALLOWED_DOMAINS || localStorage.getIte
 // ── RELAY CONFIG ─────────────────────────────────────────
 // These are now saved in localStorage via the Settings panel in the UI.
 // You no longer need to edit this file manually.
-let RELAY_URL    = localStorage.getItem('relay_url')    || 'https://script.google.com/macros/s/AKfycbwrVgEoQX2aarVjyfXm4gVIp7ooSkg-OYFmJ8nlURZvuP0uCK4OEHtmzHay7NBwTws/exec';
+let RELAY_URL    = localStorage.getItem('relay_url')    || 'https://script.google.com/a/macros/masaischool.com/s/AKfycbwrVgEoQX2aarVjyfXm4gVIp7ooSkg-OYFmJ8nlURZvuP0uCK4OEHtmzHay7NBwTws/exec';
 let RELAY_SECRET = localStorage.getItem('relay_secret') || 'iitr-dsai-relay-SECRET-change-me';
 const RELAY_SENDER = 'eictiitrprograms@masaischool.com';
 // ─────────────────────────────────────────────────────────
@@ -2231,22 +2235,35 @@ async function relaySendEmail(opts) {
   if (!RELAY_URL) {
     return { ok: false, error: 'Relay not configured — click ⚙ in the top-right to set it up.' };
   }
+  // Ensure we have a valid token — relay is org-restricted so needs auth
+  if (!MAIL_STATE.signedIn || !MAIL_STATE.accessToken) {
+    return { ok: false, error: 'Please sign in with your masaischool.com account first — the relay requires authentication.' };
+  }
+  await mailEnsureFreshToken();
+  const token = MAIL_STATE.accessToken;
   try {
     const resp = await fetch(RELAY_URL, {
       method: 'POST',
       redirect: 'follow',
-      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      headers: {
+        'Content-Type': 'text/plain;charset=UTF-8',
+        'Authorization': 'Bearer ' + token
+      },
       body: JSON.stringify({ secret: RELAY_SECRET, ...opts })
     });
     const text = await resp.text();
+    console.log('[relay] raw response:', text.slice(0, 300));
     try {
       const data = JSON.parse(text);
+      if (!data.ok) console.warn('[relay] error from server:', data.error);
       return data;
     } catch(_) {
-      return { ok: false, error: 'Unexpected response from relay: ' + text.slice(0, 120) };
+      console.error('[relay] non-JSON response:', text.slice(0, 300));
+      return { ok: false, error: 'Unexpected response from relay: ' + text.slice(0, 200) };
     }
   } catch (err) {
-    const msg = err.message || '';
+    const msg = err.message || String(err);
+    console.error('[relay] fetch error:', msg);
     const isCors = msg.includes('fetch') || msg.includes('network') || msg.toLowerCase().includes('cors') || msg.includes('Failed');
     const hint = isCors
       ? 'CORS blocked — In Apps Script: Deploy → Manage deployments → Edit → "Who has access" = Anyone → New version → Deploy.'
@@ -2292,7 +2309,9 @@ async function checkRelayStatus() {
   }
   if (badge) { badge.style.background='var(--amber-bg)'; badge.style.color='var(--amber)'; badge.textContent='⏳ Checking…'; }
   try {
-    const resp = await fetch(RELAY_URL, { method: 'GET', redirect: 'follow' });
+    const headers = {};
+    if (MAIL_STATE.accessToken) headers['Authorization'] = 'Bearer ' + MAIL_STATE.accessToken;
+    const resp = await fetch(RELAY_URL, { method: 'GET', redirect: 'follow', headers });
     const text = await resp.text();
     const data = JSON.parse(text).catch ? {} : (() => { try { return JSON.parse(text); } catch(_) { return {}; } })();
     if (data.ok) {
@@ -5327,6 +5346,26 @@ function commRenderRecipients() {
     .join('');
 }
 
+async function commTestRelay() {
+  const statusEl = document.getElementById('comm-send-status');
+  if (statusEl) { statusEl.style.color='var(--amber)'; statusEl.textContent='⏳ Testing relay...'; }
+  try {
+    const resp = await fetch(RELAY_URL, { method: 'GET', redirect: 'follow' });
+    const data = await resp.json().catch(() => ({}));
+    if (data.ok) {
+      if (statusEl) { statusEl.style.color='var(--green)'; statusEl.textContent=`✔ Relay connected. Sender: ${data.sender || RELAY_SENDER}`; }
+      showToast('✔ Relay is live!', 'success');
+    } else {
+      const err = data.error || JSON.stringify(data).slice(0,120);
+      if (statusEl) { statusEl.style.color='var(--red)'; statusEl.textContent=`✗ Relay error: ${err}`; }
+      alert(`Relay responded with an error:\n${err}\n\nCheck your Apps Script deployment settings.`);
+    }
+  } catch(e) {
+    if (statusEl) { statusEl.style.color='var(--red)'; statusEl.textContent=`✗ Cannot reach relay: ${e.message}`; }
+    alert(`Cannot reach relay:\n${e.message}\n\nCheck: Deploy → Manage deployments → "Who has access" = Anyone`);
+  }
+}
+
 async function commSendBulkBcc() {
   const subject = (document.getElementById('comm-subject')?.value || '').trim();
   const body = document.getElementById('comm-preview')?.value || '';
@@ -5335,6 +5374,7 @@ async function commSendBulkBcc() {
 
   const emails = Array.from(COMM.selectedEmails).filter(e => e && e.includes('@'));
   if (!emails.length) return showToast('No recipients selected.', 'error');
+  if (!MAIL_STATE.signedIn) { showToast('Please sign in with your masaischool.com account first — required to authenticate with the relay.', 'error'); return; }
   const ok = confirmMailSend(`Confirmation: Send BCC mail to ${emails.length} recipients?`);
   if (!ok) { showToast('Send cancelled.', 'error'); return; }
 
@@ -5344,6 +5384,8 @@ async function commSendBulkBcc() {
   const chunks = [];
   for (let i = 0; i < emails.length; i += BATCH_SIZE) chunks.push(emails.slice(i, i + BATCH_SIZE));
 
+  const commStatus2 = document.getElementById('comm-send-status');
+  if (commStatus2) { commStatus2.style.color='var(--amber)'; commStatus2.textContent=`⏳ Sending to ${emails.length} recipient${emails.length===1?'':'s'}...`; }
   showToast(`Sending ${emails.length} recipient${emails.length===1?'':'s'}...`, 'success');
   let sentRecipients = 0;
   let failedBatches = 0;
@@ -5364,8 +5406,10 @@ async function commSendBulkBcc() {
   }
 
   if (!failedBatches) {
+    if (commStatus2) { commStatus2.style.color='var(--green)'; commStatus2.textContent=`✔ Sent to ${sentRecipients}/${emails.length} recipients from ${RELAY_SENDER}.`; }
     showToast(`✔ Sent to ${sentRecipients}/${emails.length} recipients.`, 'success');
   } else {
+    if (commStatus2) { commStatus2.style.color='var(--red)'; commStatus2.textContent=`✗ ${sentRecipients}/${emails.length} sent, ${failedBatches} batch(es) failed.`; }
     showToast(`Completed: ${sentRecipients}/${emails.length} sent, ${failedBatches} failed.`, 'error');
   }
 }
@@ -5378,19 +5422,28 @@ async function commSendTest() {
   const body = document.getElementById('comm-preview')?.value || '';
   if (!subject) return showToast('Please enter a subject.', 'error');
   if (!body.trim()) return showToast('Please enter a message body.', 'error');
+  if (!MAIL_STATE.signedIn) { showToast('Please sign in with your masaischool.com account first.', 'error'); return; }
   const ok = confirmMailSend(`Confirmation: Send test mail to ${testTo} from eictiitrprograms@masaischool.com?`);
   if (!ok) { showToast('Send cancelled.', 'error'); return; }
 
+  const commStatus = document.getElementById('comm-send-status');
+  if (commStatus) { commStatus.style.color='var(--amber)'; commStatus.textContent='⏳ Sending test email...'; }
   showToast('Sending test email...', 'success');
   try {
     const result = await relaySendEmail({ to: testTo, cc: '', bcc: '', subject: `[TEST] ${subject}`, body, htmlBody: '' });
     if (result.ok) {
+      if (commStatus) { commStatus.style.color='var(--green)'; commStatus.textContent=`✔ Test email sent to ${testTo} from ${RELAY_SENDER}.`; }
       showToast(`✔ Test email sent to ${testTo} from ${RELAY_SENDER}.`, 'success');
     } else {
+      if (commStatus) { commStatus.style.color='var(--red)'; commStatus.textContent=`✗ Send failed: ${result.error}`; }
       showToast(`Test send failed: ${result.error}`, 'error');
+      alert(`Email relay error:\n\n${result.error}\n\nCheck: Is the relay Apps Script deployed with "Execute as: Me" and "Who has access: Anyone"?\nAlso verify the secret key matches.`);
     }
   } catch(err) {
-    showToast(`Test send failed: ${err?.message || err}`, 'error');
+    const msg = err?.message || String(err);
+    if (commStatus) { commStatus.style.color='var(--red)'; commStatus.textContent=`✗ Error: ${msg}`; }
+    showToast(`Test send failed: ${msg}`, 'error');
+    alert(`Email send error:\n\n${msg}`);
   }
 }
 
@@ -5853,7 +5906,7 @@ function _applyRelaySettings(url, secret) {
 // Seed localStorage with baked-in relay URL so all users get it automatically
 (function seedRelay() {
   if (!localStorage.getItem('relay_url')) {
-    localStorage.setItem('relay_url', 'https://script.google.com/macros/s/AKfycbwrVgEoQX2aarVjyfXm4gVIp7ooSkg-OYFmJ8nlURZvuP0uCK4OEHtmzHay7NBwTws/exec');
+    localStorage.setItem('relay_url', 'https://script.google.com/a/macros/masaischool.com/s/AKfycbwrVgEoQX2aarVjyfXm4gVIp7ooSkg-OYFmJ8nlURZvuP0uCK4OEHtmzHay7NBwTws/exec');
   }
 })();
 
@@ -5902,7 +5955,7 @@ function _applyRelaySettings(url, secret) {
 
     <div class="relay-hint">
       After saving, every email sent from the <b>Student Mail</b> tab will go from
-      <b>eictiitrprograms@masaischool.com</b> — no login required for anyone using this dashboard.
+      <b>eictiitrprograms@masaischool.com</b> — users must be signed in with their masaischool.com account.
     </div>
 
     <div class="relay-footer">
@@ -5924,7 +5977,7 @@ function _applyRelaySettings(url, secret) {
       <div class="email-modal-info">
         <span style="font-size:16px;">👥</span> <span id="email-modal-count">Drafting email to 0 filtered students</span>
       </div>
-      <p style="margin:0 0 12px;font-size:12px;color:var(--text3);line-height:1.4;">Sends from <strong>eictiitrprograms@masaischool.com</strong> via the relay — no sign-in required.</p>
+      <p style="margin:0 0 12px;font-size:12px;color:var(--text3);line-height:1.4;">Sends from <strong>eictiitrprograms@masaischool.com</strong> via relay. Sign in with your masaischool.com account on the <strong>Student Mail</strong> tab first.</p>
       
       <div class="email-modal-form-group">
         <span class="email-modal-label">Email Method</span>
