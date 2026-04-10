@@ -53,7 +53,7 @@
 
 // ── CONFIG ───────────────────────────────────────────────
 // Change this to any secret string. Must match RELAY_SECRET in index.html.
-const RELAY_SECRET = 'iitr-dsai-relay-SECRET-change-me';
+const RELAY_SECRET = 'iitr-dsai-relay-SECRET-change-me'; // keep this same in index.html
 
 // The fixed sender address (must be the account this script runs as).
 const SENDER_EMAIL = 'eictiitrprograms@masaischool.com';
