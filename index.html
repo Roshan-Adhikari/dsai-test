@@ -1207,13 +1207,17 @@
 <div class="tab-panel" id="tab-mail">
 <div class="container">
 
-  <!-- Relay status bar -->
+  <!-- Auth + status bar -->
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:18px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);">
     <div>
-      <div style="font-size:13px;font-weight:600;color:var(--text);" id="mail-auth-status">📤 Sending via <strong>eictiitrprograms@masaischool.com</strong> — no login required.</div>
+      <div style="font-size:13px;font-weight:600;color:var(--text);" id="mail-auth-status">Sign in with your <strong>@masaischool.com</strong> account to send mail.</div>
       <div style="font-size:11px;color:var(--text3);margin-top:2px;" id="mail-session-status"></div>
     </div>
-    <span id="relay-status-badge" style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;background:var(--amber-bg);color:var(--amber);">⏳ Checking relay…</span>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <span id="relay-status-badge" style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;background:var(--amber-bg);color:var(--amber);">⏳ Not signed in</span>
+      <button class="btn btn-primary" id="mail-auth-btn" onclick="mailSignIn()">Sign in with Google</button>
+      <button class="btn btn-ghost" id="mail-signout-btn" onclick="mailSignOut()" style="display:none;">Sign out</button>
+    </div>
   </div>
 
   <!-- Communication card — full width -->
@@ -2230,18 +2234,23 @@ async function relaySendEmail(opts) {
   try {
     const resp = await fetch(RELAY_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
       body: JSON.stringify({ secret: RELAY_SECRET, ...opts })
     });
-    const data = await resp.json().catch(() => ({ ok: false, error: 'Bad JSON from relay' }));
-    return data;
+    const text = await resp.text();
+    try {
+      const data = JSON.parse(text);
+      return data;
+    } catch(_) {
+      return { ok: false, error: 'Unexpected response from relay: ' + text.slice(0, 120) };
+    }
   } catch (err) {
-    // "Failed to fetch" almost always means the Apps Script is deployed with
-    // domain restriction (masaischool.com) instead of "Anyone".
-    const isCors = err.message && (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('CORS'));
+    const msg = err.message || '';
+    const isCors = msg.includes('fetch') || msg.includes('network') || msg.toLowerCase().includes('cors') || msg.includes('Failed');
     const hint = isCors
-      ? 'Deployment error: In Apps Script → Deploy → Manage deployments → Edit → set "Who has access" to Anyone (not masaischool.com) → New version → Deploy.'
-      : (err.message || 'Network error');
+      ? 'CORS blocked — In Apps Script: Deploy → Manage deployments → Edit → "Who has access" = Anyone → New version → Deploy.'
+      : msg;
     return { ok: false, error: hint };
   }
 }
@@ -2283,8 +2292,9 @@ async function checkRelayStatus() {
   }
   if (badge) { badge.style.background='var(--amber-bg)'; badge.style.color='var(--amber)'; badge.textContent='⏳ Checking…'; }
   try {
-    const resp = await fetch(RELAY_URL, { method: 'GET' });
-    const data = await resp.json().catch(() => ({}));
+    const resp = await fetch(RELAY_URL, { method: 'GET', redirect: 'follow' });
+    const text = await resp.text();
+    const data = JSON.parse(text).catch ? {} : (() => { try { return JSON.parse(text); } catch(_) { return {}; } })();
     if (data.ok) {
       if (badge) { badge.style.background='var(--green-bg)'; badge.style.color='var(--green)'; badge.textContent='✔ Relay ready'; }
       if (sessionEl) sessionEl.textContent = 'Sending as: ' + (data.sender || RELAY_SENDER);
@@ -2990,28 +3000,10 @@ function switchTab(name) {
 }
 
 async function initStudentMailTab() {
-  if (!MAIL_STATE.initialized) {
-    document.getElementById('mail-search').value = '';
-    MAIL_STATE.initialized = true;
-  }
-  await mailLoadStudentDirectory();
-  await mailInitGoogleClients();
   try { commInit(); } catch (_) {}
-  // Restore token-based session on refresh (if still valid).
+  await mailInitGoogleClients();
   if (!MAIL_STATE.signedIn) mailTryRestoreSessionToken();
-  if (MAIL_STATE.signedIn && !MAIL_STATE.accountEmail) {
-    MAIL_STATE.accountEmail = await mailFetchAccountEmail();
-    if (!mailIsAccountAllowed(MAIL_STATE.accountEmail)) {
-      mailSignOut();
-      const domainHint = MAIL_ALLOWED_DOMAINS.length ? ` (${MAIL_ALLOWED_DOMAINS.join(', ')})` : '';
-      showToast(`Please sign in with your institute email${domainHint}.`, 'error');
-      return;
-    }
-  }
   mailRenderAuthState();
-  if (MAIL_STATE.signedIn && !MAIL_STATE.loading && MAIL_STATE.threads.length === 0) {
-    await mailLoadThreads();
-  }
 }
 
 async function mailInitGoogleClients() {
@@ -3111,35 +3103,22 @@ function mailUpdateSessionStatus() {
 }
 
 function mailRenderAuthState() {
-  const authBtn = document.getElementById('mail-auth-btn');
-  const composeBtn = document.getElementById('mail-compose-btn');
-  const refreshBtn = document.getElementById('mail-refresh-btn');
+  const authBtn    = document.getElementById('mail-auth-btn');
   const signoutBtn = document.getElementById('mail-signout-btn');
-  const status = document.getElementById('mail-auth-status');
-  mailUpdateSessionStatus();
-  if (!authBtn || !composeBtn || !refreshBtn || !signoutBtn || !status) return;
-  if (!MAIL_OAUTH_CLIENT_ID) {
-    authBtn.style.display = '';
-    composeBtn.style.display = 'none';
-    refreshBtn.style.display = 'none';
-    signoutBtn.style.display = 'none';
-    status.textContent = 'Missing OAuth client ID. Add window.MAIL_OAUTH_CLIENT_ID in this app to continue.';
-    return;
-  }
-  if (!MAIL_STATE.signedIn) {
-    authBtn.style.display = '';
-    composeBtn.style.display = 'none';
-    refreshBtn.style.display = 'none';
-    signoutBtn.style.display = 'none';
-    const domainHint = MAIL_ALLOWED_DOMAINS.length ? ` (${MAIL_ALLOWED_DOMAINS.join(', ')})` : '';
-    status.textContent = `Sign in with Google${domainHint} to read and reply to student mail.`;
+  const statusEl   = document.getElementById('mail-auth-status');
+  const badge      = document.getElementById('relay-status-badge');
+  if (!authBtn) return;
+  if (MAIL_STATE.signedIn) {
+    authBtn.style.display    = 'none';
+    if (signoutBtn) signoutBtn.style.display = 'inline-flex';
+    const email = MAIL_STATE.accountEmail || 'masaischool.com account';
+    if (statusEl) statusEl.innerHTML = '✔ Signed in as <strong>' + email + '</strong> — emails will send from this account.';
+    if (badge) { badge.style.background='var(--green-bg)'; badge.style.color='var(--green)'; badge.textContent='✔ Ready to send'; }
   } else {
-    authBtn.style.display = 'none';
-    composeBtn.style.display = '';
-    refreshBtn.style.display = '';
-    signoutBtn.style.display = '';
-    const signedInEmail = MAIL_STATE.accountEmail || MAIL_ALLOWED_EMAIL || 'your account';
-    status.textContent = MAIL_STATE.loading ? 'Loading inbox...' : `Signed in as ${signedInEmail}`;
+    authBtn.style.display    = 'inline-flex';
+    if (signoutBtn) signoutBtn.style.display = 'none';
+    if (statusEl) statusEl.innerHTML = 'Sign in with your <strong>@masaischool.com</strong> account to send mail.';
+    if (badge) { badge.style.background='var(--amber-bg)'; badge.style.color='var(--amber)'; badge.textContent='⏳ Not signed in'; }
   }
 }
 
@@ -5088,29 +5067,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   loadStudentData(); // primary data — start immediately
-  mailUpdateUnreadBadge();
-  mailRenderAuthState();
-  // Pre-warm Google auth libs so first click is instant.
-  setTimeout(() => { mailInitGoogleClients().catch(() => {}); }, 0);
-  // Try to restore Gmail session after refresh (no prompt).
-  setTimeout(async () => {
-    try {
-      await mailInitGoogleClients();
-      if (mailTryRestoreSessionToken()) {
-        mailRenderAuthState();
-        // If user lands on Student Mail first, load quickly.
-        checkRelayStatus();
-        if (currentTab === 'mail') {
-          await mailLoadStudentDirectory();
-          await mailLoadThreads({ silent: true });
-        }
-      } else if (MAIL_STATE.tokenClient) {
-        // Silent re-auth if browser allows (no consent prompt).
-        MAIL_STATE.tokenClient.requestAccessToken({ prompt: '' });
-      }
-    } catch (_) {}
-  }, 50);
-  setInterval(mailUpdateSessionStatus, 30_000);
+  // Check relay status on page load
+  setTimeout(() => { checkRelayStatus(); }, 300);
   // Stagger non-critical renders to keep main thread free
   setTimeout(() => { renderGrading(); renderZoomTab(); }, 50);
   setTimeout(() => { renderRoadmap(); }, 100);
@@ -5377,7 +5335,7 @@ async function commSendBulkBcc() {
 
   const emails = Array.from(COMM.selectedEmails).filter(e => e && e.includes('@'));
   if (!emails.length) return showToast('No recipients selected.', 'error');
-  const ok = confirmMailSend(`Confirmation: Send BCC mail to ${emails.length} recipients from ${RELAY_SENDER}?`);
+  const ok = confirmMailSend(`Confirmation: Send BCC mail to ${emails.length} recipients?`);
   if (!ok) { showToast('Send cancelled.', 'error'); return; }
 
   // Batch into chunks of 450 (Apps Script MailApp daily limit is generous but chunk for reliability)
@@ -5386,34 +5344,30 @@ async function commSendBulkBcc() {
   const chunks = [];
   for (let i = 0; i < emails.length; i += BATCH_SIZE) chunks.push(emails.slice(i, i + BATCH_SIZE));
 
-  showToast(`Sending ${emails.length} recipient${emails.length===1?'':'s'} via relay...`, 'success');
+  if (!MAIL_STATE.signedIn) { showToast('Please sign in with your @masaischool.com account first.', 'error'); return; }
+  showToast(`Sending ${emails.length} recipient${emails.length===1?'':'s'}...`, 'success');
   let sentRecipients = 0;
   let failedBatches = 0;
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
   for (let i = 0; i < chunks.length; i++) {
     const batch = chunks[i];
-    const result = await relaySendEmail({
-      to: '',
-      bcc: batch.join(', '),
-      subject,
-      body,
-      htmlBody: ''
-    });
-    if (result.ok) {
+    try {
+      const raw = await mailBuildRawMessage({ to: 'undisclosed-recipients:;', cc: '', bcc: batch.join(', '), subject, bodyText: body, bodyHtml: '', inReplyTo: '', references: '', attachments: [] });
+      await window.gapi.client.gmail.users.messages.send({ userId: 'me', resource: { raw } });
       sentRecipients += batch.length;
       showToast(`Batch ${i+1}/${chunks.length} sent (${batch.length} recipients).`, 'success');
-    } else {
+    } catch(err) {
       failedBatches++;
-      showToast(`Batch ${i+1}/${chunks.length} failed: ${result.error}`, 'error');
+      showToast(`Batch ${i+1}/${chunks.length} failed: ${err?.result?.error?.message || err.message}`, 'error');
     }
     if (i < chunks.length - 1) await sleep(BATCH_DELAY_MS);
   }
 
   if (!failedBatches) {
-    showToast(`✔ Sent to ${sentRecipients}/${emails.length} recipients from ${RELAY_SENDER}.`, 'success');
+    showToast(`✔ Sent to ${sentRecipients}/${emails.length} recipients.`, 'success');
   } else {
-    showToast(`Completed with issues: ${sentRecipients}/${emails.length} sent, ${failedBatches} batch(es) failed.`, 'error');
+    showToast(`Completed: ${sentRecipients}/${emails.length} sent, ${failedBatches} failed.`, 'error');
   }
 }
 
@@ -5425,20 +5379,17 @@ async function commSendTest() {
   const body = document.getElementById('comm-preview')?.value || '';
   if (!subject) return showToast('Please enter a subject.', 'error');
   if (!body.trim()) return showToast('Please enter a message body.', 'error');
-  const ok = confirmMailSend(`Confirmation: Send test mail to ${testTo} from ${RELAY_SENDER}?`);
+  const ok = confirmMailSend(`Confirmation: Send test mail to ${testTo} from eictiitrprograms@masaischool.com?`);
   if (!ok) { showToast('Send cancelled.', 'error'); return; }
 
-  showToast('Sending test email via relay...', 'success');
-  const result = await relaySendEmail({
-    to: testTo,
-    subject: `[TEST] ${subject}`,
-    body,
-    htmlBody: ''
-  });
-  if (result.ok) {
-    showToast(`✔ Test email sent to ${testTo} from ${RELAY_SENDER}.`, 'success');
-  } else {
-    showToast(`Test send failed: ${result.error}`, 'error');
+  if (!MAIL_STATE.signedIn) { showToast('Please sign in first.', 'error'); return; }
+  showToast('Sending test email...', 'success');
+  try {
+    const raw = await mailBuildRawMessage({ to: testTo, cc: '', bcc: '', subject: `[TEST] ${subject}`, bodyText: body, bodyHtml: '', inReplyTo: '', references: '', attachments: [] });
+    await window.gapi.client.gmail.users.messages.send({ userId: 'me', resource: { raw } });
+    showToast(`✔ Test email sent to ${testTo}.`, 'success');
+  } catch(err) {
+    showToast(`Test send failed: ${err?.result?.error?.message || err.message}`, 'error');
   }
 }
 
@@ -5476,7 +5427,11 @@ async function executeBulkEmail() {
   if (!body.trim()) { showToast('Please enter a message body.', 'error'); return; }
   const emails = filteredData.map(d => (d.email || '').trim()).filter(e => e.length > 0);
   if (emails.length === 0) { showToast('None of the filtered students have a valid email address.', 'error'); return; }
-  const ok = confirmMailSend(`Confirmation: Send bulk mail to ${emails.length} recipients from ${RELAY_SENDER}?`);
+  if (!MAIL_STATE.signedIn) {
+    showToast('Sign in with your @masaischool.com account on the Student Mail tab first.', 'error');
+    closeBulkEmailModal(); switchTab('mail'); return;
+  }
+  const ok = confirmMailSend(`Confirmation: Send bulk mail to ${emails.length} recipients from eictiitrprograms@masaischool.com?`);
   if (!ok) { showToast('Send cancelled.', 'error'); return; }
 
   if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
@@ -5488,7 +5443,7 @@ async function executeBulkEmail() {
 
   const result = await relaySendEmail(relayOpts);
   if (result.ok) {
-    showToast(`✔ Email sent to ${emails.length} recipient${emails.length===1?'':'s'} from ${RELAY_SENDER}.`, 'success');
+    showToast(`✔ Email sent to ${emails.length} recipient${emails.length===1?'':'s'} from eictiitrprograms@masaischool.com.`, 'success');
     closeBulkEmailModal();
   } else {
     showToast(`Send failed: ${result.error}`, 'error');
