@@ -1,0 +1,335 @@
+/* IITR EICT DSAI dashboard — interactive layer (design system + components) */
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* Subtle scan-line depth (robot bg overlay) */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.6;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(79, 142, 255, 0.015) 2px,
+    rgba(79, 142, 255, 0.015) 4px
+  );
+}
+
+.header,
+.tab-bar,
+.container,
+.tab-panel {
+  position: relative;
+  z-index: 1;
+}
+
+/* Keep header readable (dark strip always) */
+.header {
+  background: linear-gradient(135deg, #0f1525 0%, #0a0e1a 100%);
+  color: #e8eeff;
+  border-bottom: 1px solid rgba(79, 142, 255, 0.12);
+  overflow: hidden;
+}
+
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #4f8eff, #00d4aa, #9b7fff, #4f8eff);
+  background-size: 300% 100%;
+  animation: gradientShift 4s ease-in-out infinite;
+}
+
+@keyframes gradientShift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+/* Horizontal top tabs */
+.tab-bar {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tab-btn {
+  padding: 10px 14px;
+  border-radius: 10px;
+  color: var(--text-muted);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-bottom: 2px solid transparent;
+}
+
+.tab-btn:hover {
+  background: rgba(79, 142, 255, 0.08);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.tab-btn.active {
+  background: rgba(79, 142, 255, 0.12);
+  color: var(--accent-blue);
+  border-bottom-color: var(--accent-blue);
+  font-weight: 600;
+}
+
+/* Stat / KPI cards */
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stat-card,
+.kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 20px 22px;
+  position: relative;
+  overflow: hidden;
+  transition: var(--transition);
+  animation: fadeSlideUp 0.45s ease forwards;
+  box-shadow: var(--card-shadow);
+}
+
+.stat-card::before,
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--accent-blue);
+  border-radius: 16px 16px 0 0;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.stat-card:hover,
+.kpi-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--border-default);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.stat-card:hover::before,
+.kpi-card:hover::before {
+  opacity: 1;
+}
+
+/* Charts */
+.chart-card.chart-container {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 20px;
+  transition: var(--transition);
+}
+
+.chart-card.chart-container:hover {
+  border-color: var(--border-default);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.chart-card .chart-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 16px;
+}
+
+/* Communication card accents (different colors per template) */
+.mail-comm {
+  --comm-accent: #4f8eff;
+  border: 1px solid rgba(79, 142, 255, 0.18);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--bg-card);
+}
+
+.mail-comm .mail-thread-head {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--comm-accent) 22%, transparent) 0%,
+    transparent 70%
+  );
+  border-left: 4px solid var(--comm-accent);
+}
+
+.mail-comm .mail-thread-title {
+  color: var(--text-primary);
+}
+
+.mail-comm .mail-thread-sub {
+  color: var(--text-secondary);
+}
+
+.mail-comm button.btn.btn-primary {
+  background: linear-gradient(135deg, var(--comm-accent) 0%, #6b6bff 100%);
+}
+
+.mail-comm .comm-accent-dot{
+  width:10px;
+  height:10px;
+  border-radius:999px;
+  background: var(--comm-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--comm-accent) 22%, transparent);
+  flex: 0 0 auto;
+}
+
+.mail-comm #comm-template{
+  width: 100%;
+  min-width: 280px;
+  max-width: 100%;
+}
+
+.mail-comm .mail-inline{
+  grid-template-columns: 70px 18px 1fr;
+}
+
+.mail-comm .comm-template-row{
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  row-gap: 6px;
+  align-items: center;
+}
+
+.mail-comm .comm-template-row .mail-label{
+  grid-column: 1 / 2;
+}
+
+.mail-comm .comm-template-row .comm-accent-dot{
+  grid-column: 2 / 3;
+  justify-self: start;
+}
+
+.mail-comm .comm-template-row #comm-template{
+  grid-column: 1 / -1;
+  display: block;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.mail-comm .mail-label{
+  white-space: nowrap;
+}
+
+.mail-comm .comm-btn{
+  border: 1px solid color-mix(in srgb, var(--comm-accent) 38%, var(--border-default));
+  background: color-mix(in srgb, var(--comm-accent) 10%, transparent);
+  color: var(--text-primary);
+}
+
+.mail-comm .comm-btn:hover{
+  background: color-mix(in srgb, var(--comm-accent) 16%, transparent);
+  border-color: var(--comm-accent);
+  transform: translateY(-1px);
+}
+
+.mail-comm .comm-btn-load{
+  border-color: color-mix(in srgb, #4f8eff 45%, var(--border-default));
+  background: rgba(79,142,255,0.10);
+}
+
+.mail-comm .comm-btn-selectall{
+  border-color: color-mix(in srgb, #00d4aa 45%, var(--border-default));
+  background: rgba(0,212,170,0.10);
+}
+
+.mail-comm .comm-btn-clear{
+  border-color: color-mix(in srgb, #ff6b6b 45%, var(--border-default));
+  background: rgba(255,107,107,0.10);
+}
+
+.mail-comm .comm-btn-test{
+  border-color: color-mix(in srgb, #9b7fff 45%, var(--border-default));
+  background: rgba(155,127,255,0.10);
+}
+
+.mail-comm .comm-btn-send{
+  border: none;
+}
+
+.mail-comm textarea#comm-preview:focus,
+.mail-comm input:focus,
+.mail-comm select:focus {
+  outline: none;
+  border-color: var(--comm-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--comm-accent) 18%, transparent);
+}
+
+/* Tables */
+tbody tr {
+  transition: background 0.15s ease;
+  border-bottom: 1px solid rgba(79, 142, 255, 0.05);
+}
+
+tbody tr:hover {
+  background: rgba(79, 142, 255, 0.06);
+}
+
+tbody tr:hover td:first-child {
+  box-shadow: inset 3px 0 0 #4f8eff;
+}
+
+th {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border-bottom-color: var(--border-subtle);
+}
+
+td {
+  color: var(--text-primary);
+  border-bottom-color: var(--border-subtle);
+}
+
+/* Skeleton */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #131929 25%, #1a2035 50%, #131929 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+  height: 14px;
+}
+
+html[data-theme='light'] .skeleton,
+html.light-mode .skeleton {
+  background: linear-gradient(90deg, #e8eeff 25%, #f0f4ff 50%, #e8eeff 75%);
+  background-size: 200% 100%;
+}
+
