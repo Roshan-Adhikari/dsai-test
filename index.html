@@ -1225,7 +1225,7 @@
     <div class="mail-thread-head" style="border-bottom:1px solid var(--border);padding:14px 18px;">
       <div>
         <div class="mail-thread-title" style="font-size:15px;">Communication</div>
-        <div class="mail-thread-sub">Choose a template, fill placeholders, select students (dropouts excluded), then send via BCC from <strong>eictiitrprograms@masaischool.com</strong>.</div>
+        <div class="mail-thread-sub">Choose a template, fill placeholders, select students (dropouts excluded), then send via BCC from <strong><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="d0b5b9b3a4b9b9a4a2a0a2bfb7a2b1bda390bdb1a3b1b9a3b3b8bfbfbcfeb3bfbd">[email&#160;protected]</a></strong>.</div>
       </div>
     </div>
 
@@ -1304,7 +1304,7 @@
 </div>
 </div>
 
-<script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 // ══════════════════════════════════════════════════
 //  MASTER DATA TAB  — full-field vertical card view
 //  One shared CSV, 2 rows (DM row + PM row)
@@ -5344,7 +5344,6 @@ async function commSendBulkBcc() {
   const chunks = [];
   for (let i = 0; i < emails.length; i += BATCH_SIZE) chunks.push(emails.slice(i, i + BATCH_SIZE));
 
-  if (!MAIL_STATE.signedIn) { showToast('Please sign in with your @masaischool.com account first.', 'error'); return; }
   showToast(`Sending ${emails.length} recipient${emails.length===1?'':'s'}...`, 'success');
   let sentRecipients = 0;
   let failedBatches = 0;
@@ -5353,13 +5352,13 @@ async function commSendBulkBcc() {
   for (let i = 0; i < chunks.length; i++) {
     const batch = chunks[i];
     try {
-      const raw = await mailBuildRawMessage({ to: 'undisclosed-recipients:;', cc: '', bcc: batch.join(', '), subject, bodyText: body, bodyHtml: '', inReplyTo: '', references: '', attachments: [] });
-      await window.gapi.client.gmail.users.messages.send({ userId: 'me', resource: { raw } });
+      const result = await relaySendEmail({ to: '', bcc: batch.join(', '), subject, body, htmlBody: '' });
+      if (!result.ok) throw new Error(result.error || 'Relay error');
       sentRecipients += batch.length;
       showToast(`Batch ${i+1}/${chunks.length} sent (${batch.length} recipients).`, 'success');
     } catch(err) {
       failedBatches++;
-      showToast(`Batch ${i+1}/${chunks.length} failed: ${err?.result?.error?.message || err.message}`, 'error');
+      showToast(`Batch ${i+1}/${chunks.length} failed: ${err?.message || err}`, 'error');
     }
     if (i < chunks.length - 1) await sleep(BATCH_DELAY_MS);
   }
@@ -5382,14 +5381,16 @@ async function commSendTest() {
   const ok = confirmMailSend(`Confirmation: Send test mail to ${testTo} from eictiitrprograms@masaischool.com?`);
   if (!ok) { showToast('Send cancelled.', 'error'); return; }
 
-  if (!MAIL_STATE.signedIn) { showToast('Please sign in first.', 'error'); return; }
   showToast('Sending test email...', 'success');
   try {
-    const raw = await mailBuildRawMessage({ to: testTo, cc: '', bcc: '', subject: `[TEST] ${subject}`, bodyText: body, bodyHtml: '', inReplyTo: '', references: '', attachments: [] });
-    await window.gapi.client.gmail.users.messages.send({ userId: 'me', resource: { raw } });
-    showToast(`✔ Test email sent to ${testTo}.`, 'success');
+    const result = await relaySendEmail({ to: testTo, cc: '', bcc: '', subject: `[TEST] ${subject}`, body, htmlBody: '' });
+    if (result.ok) {
+      showToast(`✔ Test email sent to ${testTo} from ${RELAY_SENDER}.`, 'success');
+    } else {
+      showToast(`Test send failed: ${result.error}`, 'error');
+    }
   } catch(err) {
-    showToast(`Test send failed: ${err?.result?.error?.message || err.message}`, 'error');
+    showToast(`Test send failed: ${err?.message || err}`, 'error');
   }
 }
 
@@ -5881,7 +5882,7 @@ function _applyRelaySettings(url, secret) {
     <div class="relay-steps">
       <b>First time? Deploy the relay in 3 steps:</b>
       <ol>
-        <li>Go to <a href="https://script.google.com" target="_blank">script.google.com</a> → sign in as <b>eictiitrprograms@masaischool.com</b> → New project</li>
+        <li>Go to <a href="https://script.google.com" target="_blank">script.google.com</a> → sign in as <b><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="ddb8b4bea9b4b4a9afadafb2baafbcb0ae9db0bcaebcb4aebeb5b2b2b1f3beb2b0">[email&#160;protected]</a></b> → New project</li>
         <li>Paste <b>email_relay.gs</b> → Deploy → New deployment → Type: <b>Web App</b> → Execute as: <b>Me</b> → Access: <b>Anyone</b> → Deploy → Authorize</li>
         <li>Copy the <b>Web App URL</b> and paste it below</li>
       </ol>
@@ -5904,7 +5905,7 @@ function _applyRelaySettings(url, secret) {
 
     <div class="relay-hint">
       After saving, every email sent from the <b>Student Mail</b> tab will go from
-      <b>eictiitrprograms@masaischool.com</b> — no login required for anyone using this dashboard.
+      <b><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="d8bdb1bbacb1b1acaaa8aab7bfaab9b5ab98b5b9abb9b1abbbb0b7b7b4f6bbb7b5">[email&#160;protected]</a></b> — no login required for anyone using this dashboard.
     </div>
 
     <div class="relay-footer">
@@ -5926,7 +5927,7 @@ function _applyRelaySettings(url, secret) {
       <div class="email-modal-info">
         <span style="font-size:16px;">👥</span> <span id="email-modal-count">Drafting email to 0 filtered students</span>
       </div>
-      <p style="margin:0 0 12px;font-size:12px;color:var(--text3);line-height:1.4;">Sends from <strong>eictiitrprograms@masaischool.com</strong> via the relay — no sign-in required.</p>
+      <p style="margin:0 0 12px;font-size:12px;color:var(--text3);line-height:1.4;">Sends from <strong><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="50353933243939242220223f3722313d23103d312331392333383f3f3c7e333f3d">[email&#160;protected]</a></strong> via the relay — no sign-in required.</p>
       
       <div class="email-modal-form-group">
         <span class="email-modal-label">Email Method</span>
@@ -5944,21 +5945,4 @@ function _applyRelaySettings(url, secret) {
       
       <div class="email-modal-form-group">
         <span class="email-modal-label">Subject</span>
-        <input type="text" class="email-input" id="email-subject" placeholder="Enter email subject...">
-      </div>
-      
-      <div class="email-modal-form-group" style="margin-bottom:0;">
-        <span class="email-modal-label">Message Body</span>
-        <textarea class="email-input" id="email-body" placeholder="Draft your email message here..."></textarea>
-      </div>
-    </div>
-    <div class="email-modal-footer">
-      <button class="btn btn-ghost" onclick="closeBulkEmailModal()">Cancel</button>
-      <button type="button" class="btn btn-primary" id="bulk-email-send-btn" onclick="executeBulkEmail()">Send email</button>
-    </div>
-  </div>
-</div>
-
-<div id="toast-container" class="toast-container"></div>
-</body>
-</html>
+        <input type="text" class="email-input" id="email-subject" placeholder="Enter emai
