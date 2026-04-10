@@ -2235,20 +2235,12 @@ async function relaySendEmail(opts) {
   if (!RELAY_URL) {
     return { ok: false, error: 'Relay not configured — click ⚙ in the top-right to set it up.' };
   }
-  // Ensure we have a valid token — relay is org-restricted so needs auth
-  if (!MAIL_STATE.signedIn || !MAIL_STATE.accessToken) {
-    return { ok: false, error: 'Please sign in with your masaischool.com account first — the relay requires authentication.' };
-  }
-  await mailEnsureFreshToken();
-  const token = MAIL_STATE.accessToken;
   try {
     const resp = await fetch(RELAY_URL, {
       method: 'POST',
       redirect: 'follow',
-      headers: {
-        'Content-Type': 'text/plain;charset=UTF-8',
-        'Authorization': 'Bearer ' + token
-      },
+      credentials: 'include',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
       body: JSON.stringify({ secret: RELAY_SECRET, ...opts })
     });
     const text = await resp.text();
@@ -2309,9 +2301,7 @@ async function checkRelayStatus() {
   }
   if (badge) { badge.style.background='var(--amber-bg)'; badge.style.color='var(--amber)'; badge.textContent='⏳ Checking…'; }
   try {
-    const headers = {};
-    if (MAIL_STATE.accessToken) headers['Authorization'] = 'Bearer ' + MAIL_STATE.accessToken;
-    const resp = await fetch(RELAY_URL, { method: 'GET', redirect: 'follow', headers });
+    const resp = await fetch(RELAY_URL, { method: 'GET', redirect: 'follow', credentials: 'include' });
     const text = await resp.text();
     const data = JSON.parse(text).catch ? {} : (() => { try { return JSON.parse(text); } catch(_) { return {}; } })();
     if (data.ok) {
